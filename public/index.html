@@ -198,9 +198,38 @@ function toggleWallets(){
 async function loadWallets(){
   const r=await fetch('/api/wallets');const d=await r.json();
   document.getElementById('wlist').innerHTML=(d.wallets||[]).map(w=>
-    `<div class="wrow"><span>${w.slice(0,6)}…${w.slice(-6)}</span><button onclick="delWallet('${w}')">retirer</button></div>`
+    `<div class="wrow"><span style="cursor:pointer;color:#22d3ee" onclick="showHoldings('${w}')">${w.slice(0,6)}…${w.slice(-6)}</span><button onclick="delWallet('${w}')">retirer</button></div>`
   ).join('')||'<div style="color:#6b6d75;font-size:12px">Aucun wallet suivi.</div>';
 }
+
+async function showHoldings(w){
+  const box=document.getElementById('wlist');
+  box.innerHTML='<div style="color:#6b6d75;font-size:12px;padding:10px 0">Chargement des positions…</div>';
+  try{
+    const r=await fetch('/api/wallets/'+w+'/holdings');
+    const d=await r.json();
+    const h=d.holdings||[];
+    const fresh=h.filter(x=>x.fresh);
+    box.innerHTML=
+      '<div style="margin-bottom:12px"><button onclick="loadWallets()" style="font-size:11px">← retour</button></div>'+
+      '<div style="font-family:monospace;font-size:11px;color:#8b8d94;margin-bottom:10px">'+w.slice(0,8)+'…'+w.slice(-8)+'</div>'+
+      '<div style="font-size:11px;color:#22c55e;margin-bottom:12px">'+fresh.length+' position(s) &lt; 24h sur '+h.length+'</div>'+
+      (h.length?h.map(x=>
+        '<div style="padding:8px 0;border-bottom:1px solid #16171b">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<span style="font-weight:600;font-size:12px">'+(x.symbol||x.mint.slice(0,6))+
+        (x.fresh?' <span class="badge b-acc">&lt;24h</span>':'')+
+        (x.score!=null?' <span class="badge b-flat">'+x.score+'</span>':'')+'</span>'+
+        '<a class="gmgn" href="https://gmgn.ai/sol/token/'+x.mint+'" target="_blank">↗</a></div>'+
+        '<div style="color:#6b6d75;font-size:10px;margin-top:3px">'+
+        (x.createdAt?'créé il y a '+age(Date.now()-x.createdAt):'âge inconnu')+
+        ' · '+x.amount.toLocaleString('fr-FR',{maximumFractionDigits:0})+' tokens</div></div>'
+      ).join(''):'<div style="color:#6b6d75;font-size:12px">Aucune position.</div>');
+  }catch(e){
+    box.innerHTML='<div style="color:#f87171;font-size:12px">Erreur de chargement.</div>';
+  }
+}
+
 async function addWallet(){
   const i=document.getElementById('waddr');
   const a=i.value.trim();if(!a)return;

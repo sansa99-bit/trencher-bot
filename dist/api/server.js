@@ -7,6 +7,7 @@ import { bus } from '../core/eventBus.js';
 import { tokenStore } from '../core/tokenStore.js';
 import { solPrice } from '../core/solPrice.js';
 import { createLogger } from '../util/logger.js';
+import { walletHoldings } from './holdings.js';
 const log = createLogger('api');
 const PORT = 3001;
 const WALLETS_PATH = resolve(process.cwd(), 'config/smart-wallets.json');
@@ -137,6 +138,25 @@ export function startApi() {
             fail.alive++;
         }
         res.json({ total: all.length, fail, samples });
+    });
+    app.get('/api/wallets/:address/holdings', async (req, res) => {
+        try {
+            const holdings = await walletHoldings(req.params.address);
+            const enriched = holdings.map((h) => {
+                const t = tokenStore.get(h.mint);
+                return {
+                    ...h,
+                    symbol: t?.symbol ?? h.symbol,
+                    name: t?.name ?? h.name,
+                    score: t?.score,
+                    marketCap: t?.marketCap,
+                };
+            });
+            res.json({ wallet: req.params.address, holdings: enriched });
+        }
+        catch (err) {
+            res.status(502).json({ error: String(err) });
+        }
     });
     const server = createServer(app);
     const wss = new WebSocketServer({ server });
