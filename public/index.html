@@ -93,6 +93,20 @@ body{padding:0 34px}
 .tick .up{color:#22c55e}
 .tick .dn{color:#ef4444}
 @media(max-width:900px){body{padding:0}.rail{display:none}}
+
+.calls{border-bottom:1px solid #1c1d21;background:#0a0b0d}
+.calls-head{display:flex;align-items:center;gap:16px;padding:10px 14px;background:#0e0f12;border-bottom:1px solid #1c1d21;flex-wrap:wrap}
+.calls-head h2{font-size:11px;letter-spacing:.8px;color:#8b8d94;font-weight:600}
+.calls-head .kpi{font-size:11px;color:#6b6d75}
+.calls-head .kpi b{color:#22c55e;font-variant-numeric:tabular-nums}
+.mult{font-weight:700;font-variant-numeric:tabular-nums}
+.m-hi{color:#22c55e;text-shadow:0 0 9px rgba(34,197,94,.45)}
+.m-mid{color:#a3e635}
+.m-lo{color:#8b8d94}
+.m-neg{color:#ef4444}
+.mstones{display:inline-flex;gap:3px}
+.mstone{font-size:9px;padding:1px 4px;border-radius:3px;background:#16171b;color:#3f4046}
+.mstone.on{background:#14532d;color:#4ade80}
 </style>
 </head>
 <body>
@@ -156,6 +170,23 @@ body{padding:0 34px}
   </label>
   <button onclick="toggleWallets()">Smart Wallets</button>
 </div>
+
+<section class="calls">
+  <div class="calls-head">
+    <h2>CALLS <span id="nCalls" style="color:#22c55e">0</span></h2>
+    <div class="kpi">meilleur pic <b id="bestX">-</b></div>
+    <div class="kpi">moyenne <b id="avgX">-</b></div>
+    <div class="kpi">en profit <b id="inProfit">-</b></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th>#</th><th>Token</th><th>Multiple</th><th>Pic</th><th>Paliers</th>
+      <th>CA call</th><th>CA now</th><th>Depuis</th><th>Phase</th><th></th>
+    </tr></thead>
+    <tbody id="rowsCalls"></tbody>
+  </table>
+  <div class="empty" id="emptyCalls">Aucun call pour l'instant.</div>
+</section>
 
 <div class="split">
   <section class="pane">
@@ -394,6 +425,55 @@ function renderRails(list){
   document.getElementById('railR').innerHTML=html;
 }
 
+
+let callList = [];
+const MILESTONES=[1.5,2,3,5,10];
+
+function multClass(x){
+  if(x==null) return 'm-lo';
+  if(x>=3) return 'm-hi';
+  if(x>=1.5) return 'm-mid';
+  if(x<1) return 'm-neg';
+  return 'm-lo';
+}
+function stones(peak){
+  return '<span class="mstones">'+MILESTONES.map(function(m){
+    return '<span class="mstone'+((peak||0)>=m?' on':'')+'">'+m+'x</span>';
+  }).join('')+'</span>';
+}
+function callRow(t,i){
+  var px = t.profitX ? t.profitX.toFixed(2)+'x' : '-';
+  var pk = t.peakX ? t.peakX.toFixed(1)+'x' : '-';
+  var since = t.alertedAt ? age(Date.now()-t.alertedAt) : '-';
+  var ph = t.phase==='MIGRATED' ? 'MIG' : 'PRE';
+  var phc = t.phase==='MIGRATED' ? 'b-mig' : 'b-pre';
+  return '<tr>'
+    + '<td style="color:#6b6d75">'+(i+1)+'</td>'
+    + '<td><div class="sym">$'+t.symbol+'</div><div class="name">'+t.name+'</div></td>'
+    + '<td><span class="mult '+multClass(t.profitX)+'">'+px+'</span></td>'
+    + '<td><span class="mult '+multClass(t.peakX)+'">'+pk+'</span></td>'
+    + '<td>'+stones(t.peakX)+'</td>'
+    + '<td>'+usd(t.alertMcap)+'</td>'
+    + '<td>'+usd(t.marketCap)+'</td>'
+    + '<td style="color:#8b8d94">'+since+'</td>'
+    + '<td><span class="badge '+phc+'">'+ph+'</span></td>'
+    + '<td><a class="gmgn" href="https://gmgn.ai/sol/token/'+t.mint+'" target="_blank">GMGN</a></td>'
+    + '</tr>';
+}
+function renderCalls(){
+  var l=callList;
+  document.getElementById('nCalls').textContent=l.length;
+  document.getElementById('emptyCalls').style.display=l.length?'none':'block';
+  if(l.length){
+    var xs=l.map(function(t){return t.profitX||0;});
+    var peaks=l.map(function(t){return t.peakX||0;});
+    document.getElementById('bestX').textContent=Math.max.apply(null,peaks).toFixed(1)+'x';
+    document.getElementById('avgX').textContent=(xs.reduce(function(a,b){return a+b;},0)/xs.length).toFixed(2)+'x';
+    document.getElementById('inProfit').textContent=xs.filter(function(x){return x>1;}).length+'/'+l.length;
+  }
+  document.getElementById('rowsCalls').innerHTML=l.map(callRow).join('');
+}
+
 function connect(){
   const ws=new WebSocket('ws://'+location.host);
   ws.onopen=()=>{document.getElementById('dot').className='dot';document.getElementById('conn').textContent='live'};
@@ -402,6 +482,7 @@ function connect(){
     const m=JSON.parse(e.data);
     if(m.type==='snapshot'){
       tokens=m.tokens||[];
+      callList=m.called||[];
       preList=m.pre||tokens.filter(t=>t.phase!=='MIGRATED');
       migList=m.migrated||tokens.filter(t=>t.phase==='MIGRATED');
       document.getElementById('sol').textContent='$'+(m.solPrice??0).toFixed(2);
@@ -413,6 +494,7 @@ function connect(){
       renderDonut(m.outcomes);
       renderRails(m.majors);
       updateEcg(m.stats, tokens);
+      renderCalls();
       render();
     }
   };

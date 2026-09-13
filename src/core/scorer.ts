@@ -52,27 +52,43 @@ function narrativeValue(t: TokenState): number {
 /** Score PRE-MIGRATION (sur 100). */
 
 /**
- * Volume noté sur deux axes : le volume brut (plancher d'activité réelle)
- * et le turnover — volume 5m rapporté au mcap, qui dit si ça tourne vite
- * pour la taille du token. Le turnover pèse plus : c'est lui qui distingue
- * un token de 15k qui fait 12k de volume d'un token de 200k qui fait pareil.
+ * Mesuré sur les données : les rugs ont PLUS de volume brut et PLUS de trades
+ * que les gagnants (1781$ vs 1144$ / 26 tx-min vs 9). L'agitation est la
+ * signature du wash trading, pas d'un vrai départ. Ce qui sépare vraiment,
+ * c'est la TAILLE des achats — 26$ vs 10$ de ticket moyen.
  */
-function volumeScore(volume5m: number | undefined, marketCap: number | undefined, max: number): number {
-  if (volume5m === undefined || volume5m <= 0) return 0;
-  const raw = ramp(volume5m, 4_000, 45_000, max * 0.4);
-  if (!marketCap || marketCap <= 0) return Math.round(raw);
-  const turnover = volume5m / marketCap;
-  return Math.round(raw + ramp(turnover, 0.08, 0.9, max * 0.6));
+function buyQualityScore(t: TokenState, max: number): number {
+  const v = t.volume;
+  const avg = v.averageBuySize ?? 0;
+  const big = v.largestBuy ?? 0;
+  if (avg <= 0) return 0;
+
+  const avgPart = ramp(avg, 6, 45, max * 0.6);
+  const bigPart = ramp(big, 10, 90, max * 0.4);
+
+  // Pénalité : beaucoup de transactions avec de petits tickets = bots.
+  const tc = v.tradeCount1m ?? 0;
+  const churn = tc >= 20 && avg < 12 ? 0.55 : tc >= 35 && avg < 20 ? 0.75 : 1;
+
+  return Math.round((avgPart + bigPart) * churn);
+}
+
+/** Turnover seul, sans le volume brut qui trompe. */
+function turnoverScore(t: TokenState, max: number): number {
+  const mcap = t.marketCap ?? 0;
+  const vol = t.volume.volume5m ?? 0;
+  if (mcap <= 0 || vol <= 0) return 0;
+  return ramp(vol / mcap, 0.05, 0.8, max);
 }
 
 export function scorePreMigration(t: TokenState): ScoreBreakdown {
   const v = t.volume;
   return build([
-    { key: 'volume', label: '🔥 Volume', value: volumeScore(v.volume5m, t.marketCap, PRE_WEIGHTS.volume), max: PRE_WEIGHTS.volume },
+    { key: 'buyQuality', label: '💎 Qualité achats', value: buyQualityScore(t, PRE_WEIGHTS.buyQuality), max: PRE_WEIGHTS.buyQuality },
+    { key: 'curve', label: '📈 Courbe', value: ramp(t.bondingCurveProgress, 0.12, 0.75, PRE_WEIGHTS.curve), max: PRE_WEIGHTS.curve },
     { key: 'smartWallets', label: '🐋 Smart Wallets', value: smartWalletScore(t, 'entered', PRE_WEIGHTS.smartWallets), max: PRE_WEIGHTS.smartWallets },
-    { key: 'momentum', label: '⚡ Momentum', value: ramp(v.volumeAcceleration, 0.8, 2.5, PRE_WEIGHTS.momentum), max: PRE_WEIGHTS.momentum },
-    { key: 'buyers', label: '👥 Buyers', value: ramp(v.uniqueBuyers, 5, 60, PRE_WEIGHTS.buyers), max: PRE_WEIGHTS.buyers },
-    { key: 'distribution', label: '📊 Distribution', value: ramp(v.uniqueBuyers, 3, 40, PRE_WEIGHTS.distribution), max: PRE_WEIGHTS.distribution },
+    { key: 'turnover', label: '🔥 Turnover', value: turnoverScore(t, PRE_WEIGHTS.turnover), max: PRE_WEIGHTS.turnover },
+    { key: 'holders', label: '👥 Holders', value: ramp(t.holders, 2, 45, PRE_WEIGHTS.holders), max: PRE_WEIGHTS.holders },
     { key: 'dev', label: '👨‍💻 Dev', value: rampInverse(t.devSoldPct ?? 0, 0.02, 0.5, PRE_WEIGHTS.dev), max: PRE_WEIGHTS.dev },
     { key: 'narrative', label: '🧠 Narrative', value: ramp(narrativeValue(t), 0, 1, PRE_WEIGHTS.narrative), max: PRE_WEIGHTS.narrative },
   ]);

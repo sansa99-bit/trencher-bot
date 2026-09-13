@@ -33,6 +33,10 @@ interface TokenRow {
   launchpad: string;
   tradeCount1m?: number;
   launches?: number;
+  alertMcap?: number;
+  alertedAt?: number;
+  profitX?: number;
+  peakX?: number;
   change?: number;
   drawdown?: number;
   ageMs: number;
@@ -56,6 +60,10 @@ function toRow(t: TokenState): TokenRow {
     launchpad: 'Pump.fun',
     tradeCount1m: t.volume.tradeCount1m,
     launches: Math.max(tickerLaunches(t.symbol), creatorLaunches(t.creator)),
+    alertMcap: t.alertMcap,
+    alertedAt: t.alertedAt,
+    profitX: t.alertMcap && t.marketCap ? t.marketCap / t.alertMcap : undefined,
+    peakX: t.alertMcap && t.athMarketCap ? t.athMarketCap / t.alertMcap : undefined,
     change: t.firstMarketCap && t.marketCap ? t.marketCap / t.firstMarketCap - 1 : undefined,
     drawdown: t.athMarketCap && t.marketCap ? t.marketCap / t.athMarketCap - 1 : undefined,
     ageMs: Date.now() - t.createdAt,
@@ -128,6 +136,18 @@ function topTokens(limit = 50): TokenRow[] {
     .map(toRow);
 }
 
+
+/** Tokens callés, classés par multiple courant. Pas de filtre de vitalité :
+ *  un call se suit jusqu'à sa purge, même s'il retombe. */
+function calledTokens(limit = 50): TokenRow[] {
+  return tokenStore
+    .all()
+    .filter((t) => (t.alertCount ?? 0) > 0 && t.alertMcap)
+    .map(toRow)
+    .sort((a, b) => (b.profitX ?? 0) - (a.profitX ?? 0))
+    .slice(0, limit);
+}
+
 function readWallets(): string[] {
   if (!existsSync(WALLETS_PATH)) return [];
   try {
@@ -155,6 +175,7 @@ export function startApi(): () => void {
       tokens: all,
       pre: all.filter((t) => t.phase === 'PRE_MIGRATION').slice(0, 50),
       migrated: all.filter((t) => t.phase === 'MIGRATED').slice(0, 50),
+      called: calledTokens(),
       solPrice: solPrice.get(),
       stats: tokenStore.stats(),
       outcomes: outcomeStats(),
@@ -247,6 +268,7 @@ export function startApi(): () => void {
     ws.send(JSON.stringify({ type: 'snapshot', tokens: snap,
       pre: snap.filter((t) => t.phase === 'PRE_MIGRATION').slice(0, 50),
       migrated: snap.filter((t) => t.phase === 'MIGRATED').slice(0, 50),
+      called: calledTokens(),
       solPrice: solPrice.get() }));
     ws.on('close', () => clients.delete(ws));
     ws.on('error', () => clients.delete(ws));
@@ -271,6 +293,7 @@ export function startApi(): () => void {
     broadcast({ type: 'snapshot', tokens: snap,
       pre: snap.filter((t) => t.phase === 'PRE_MIGRATION').slice(0, 50),
       migrated: snap.filter((t) => t.phase === 'MIGRATED').slice(0, 50),
+      called: calledTokens(),
       solPrice: solPrice.get(), stats: tokenStore.stats(), outcomes: outcomeStats(), majors: majors() });
   }, 2000);
   pushTimer.unref();

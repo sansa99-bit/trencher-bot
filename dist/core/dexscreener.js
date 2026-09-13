@@ -1,6 +1,7 @@
 import { bus } from './eventBus.js';
 import { tokenStore } from './tokenStore.js';
 import { createLogger } from '../util/logger.js';
+import { checkProfitMilestones } from './pipeline.js';
 const log = createLogger('dexscreener');
 const BATCH_SIZE = 30; // max d'adresses par requête
 const CYCLE_MS = 7_000; // un lot toutes les 20s
@@ -51,7 +52,9 @@ function apply(token, pair) {
         bus.emit('token:migrated', token);
     }
     // On ne touche pas aux métriques d'un token nourri en direct
-    const localFresh = token.lastTradeAt && now - token.lastTradeAt < LOCAL_FRESH_MS;
+    const localFresh = token.phase !== 'MIGRATED'
+        && token.lastTradeAt
+        && now - token.lastTradeAt < LOCAL_FRESH_MS;
     if (localFresh)
         return;
     const mcap = pair.marketCap ?? pair.fdv;
@@ -78,7 +81,7 @@ function apply(token, pair) {
         // Comptes de transactions, pas de wallets uniques — approximation assumée
         token.volume.tradeCount1m = Math.round((buys + sells) / 5);
         token.volume.buySellRatio = sells > 0 ? buys / sells : buys > 0 ? 3 : undefined;
-        if (buys + sells > 0)
+        if (buys + sells > 0 && token.phase !== 'MIGRATED')
             token.lastTradeAt = now;
     }
     token.narrative = deriveNarrative(pair);
@@ -115,6 +118,7 @@ async function cycle() {
             if (!pair)
                 continue;
             apply(token, pair);
+            checkProfitMilestones(token);
             enriched++;
             bus.emit('token:updated', token);
         }

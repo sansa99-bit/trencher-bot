@@ -163,7 +163,7 @@ function evaluate(state: TokenState): void {
 
 const PROFIT_MILESTONES = [1.5, 2, 3, 5, 10];
 
-function checkProfitMilestones(state: TokenState): void {
+export function checkProfitMilestones(state: TokenState): void {
   if (!state.alertPrice || !state.alertMcap || !state.alertedAt) return;
   if (state.marketCap === undefined || state.marketCap < 10_000) {
     if (state.lastProfitLevel !== 0) {

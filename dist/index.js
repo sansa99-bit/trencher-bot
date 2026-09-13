@@ -15,6 +15,7 @@ import { startApi } from './api/server.js';
 import { startDexEnricher } from './core/dexscreener.js';
 import { startOutcomeTracker } from './core/outcomes.js';
 import { startLineageTracker } from './core/lineage.js';
+import { startSampler } from './core/samples.js';
 const log = createLogger('main');
 async function main() {
     const config = loadConfig();
@@ -31,6 +32,7 @@ async function main() {
     const stopDex = startDexEnricher();
     const stopOutcomes = startOutcomeTracker();
     const stopLineage = startLineageTracker();
+    const stopSampler = startSampler();
     try {
         const bot = telegram.create();
         if (bot) {
@@ -50,6 +52,7 @@ async function main() {
     setupShutdown(async () => {
         log.info('Arrêt en cours…');
         await source.stop();
+        stopSampler();
         stopLineage();
         stopOutcomes();
         stopDex();

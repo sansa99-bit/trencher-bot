@@ -15,13 +15,13 @@ export const LEVEL_THRESHOLDS = {
     A_PLUS: 90,
 };
 export const PRE_WEIGHTS = {
-    volume: 20,
-    smartWallets: 20,
-    momentum: 15,
-    buyers: 15,
-    distribution: 10,
-    dev: 10,
-    narrative: 10,
+    buyQuality: 28,
+    curve: 22,
+    smartWallets: 18,
+    turnover: 12,
+    holders: 10,
+    dev: 6,
+    narrative: 4,
 };
 export const POST_WEIGHTS = {
     volume: 25,

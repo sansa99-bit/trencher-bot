@@ -158,7 +158,7 @@ function evaluate(state) {
     bus.emit('token:updated', state);
 }
 const PROFIT_MILESTONES = [1.5, 2, 3, 5, 10];
-function checkProfitMilestones(state) {
+export function checkProfitMilestones(state) {
     if (!state.alertPrice || !state.alertMcap || !state.alertedAt)
         return;
     if (state.marketCap === undefined || state.marketCap < 10_000) {
