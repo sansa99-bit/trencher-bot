@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trencher Scanner</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0b0d;color:#e4e4e7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:13px}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #1c1d21;background:#0e0f12;position:sticky;top:0;z-index:10}
+.brand{font-size:15px;font-weight:700;letter-spacing:.5px}
+.brand span{color:#22c55e}
+.stats{display:flex;gap:18px;font-size:12px;color:#8b8d94}
+.stats b{color:#e4e4e7;font-weight:600}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:6px}
+.dot.off{background:#ef4444}
+.toolbar{display:flex;gap:10px;padding:12px 20px;border-bottom:1px solid #1c1d21;flex-wrap:wrap;align-items:center}
+input,select,button{background:#16171b;border:1px solid #26272c;color:#e4e4e7;padding:7px 11px;border-radius:6px;font-size:12px;font-family:inherit}
+input:focus,select:focus{outline:none;border-color:#3f4046}
+button{cursor:pointer;transition:background .15s}
+button:hover{background:#1e1f24}
+button.primary{background:#22c55e;border-color:#22c55e;color:#07120b;font-weight:600}
+button.primary:hover{background:#16a34a}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:9px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:#6b6d75;border-bottom:1px solid #1c1d21;font-weight:600;white-space:nowrap}
+td{padding:10px 12px;border-bottom:1px solid #141519;white-space:nowrap}
+tr:hover td{background:#111216}
+.sym{font-weight:700;font-size:13px}
+.name{color:#6b6d75;font-size:11px;margin-top:2px}
+.score{font-weight:700;font-size:14px}
+.s-hi{color:#22c55e}.s-mid{color:#eab308}.s-lo{color:#71717a}
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.3px}
+.b-pre{background:#1e3a5f;color:#60a5fa}
+.b-mig{background:#14532d;color:#4ade80}
+.b-pump{background:#2d1b4e;color:#c084fc}
+.b-whale{background:#164e63;color:#22d3ee}
+.b-acc{background:#3f1d1d;color:#f87171}
+.b-build{background:#3f3416;color:#fbbf24}
+.b-flat{background:#26272c;color:#8b8d94}
+.b-alert{background:#4a1d1d;color:#fca5a5}
+.bar{width:60px;height:5px;background:#26272c;border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#22c55e,#4ade80)}
+a.gmgn{color:#22c55e;text-decoration:none;font-weight:600;font-size:11px}
+a.gmgn:hover{text-decoration:underline}
+.empty{padding:60px;text-align:center;color:#6b6d75}
+.wallets{position:fixed;top:0;right:-360px;width:360px;height:100vh;background:#0e0f12;border-left:1px solid #1c1d21;transition:right .2s;z-index:20;padding:20px;overflow-y:auto}
+.wallets.open{right:0}
+.wallets h3{font-size:14px;margin-bottom:14px}
+.wrow{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #16171b;font-size:11px;font-family:monospace}
+.wrow button{padding:3px 8px;font-size:10px;color:#f87171;border-color:#3f1d1d}
+.wadd{display:flex;gap:8px;margin-bottom:16px}
+.wadd input{flex:1;font-family:monospace;font-size:11px}
+.close{position:absolute;top:16px;right:16px;background:none;border:none;color:#6b6d75;font-size:20px;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">TRENCHER <span>SCANNER</span></div>
+  <div class="stats">
+    <div><span class="dot" id="dot"></span><span id="conn">connexion…</span></div>
+    <div>SOL <b id="sol">—</b></div>
+    <div>Tokens <b id="ntok">0</b></div>
+    <div>Pre <b id="npre">0</b></div>
+    <div>Migrated <b id="nmig">0</b></div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <input id="q" placeholder="Rechercher un symbole…" style="width:200px">
+  <select id="phase">
+    <option value="">Toutes phases</option>
+    <option value="PRE_MIGRATION">Pre-migration</option>
+    <option value="MIGRATED">Migrated</option>
+  </select>
+  <select id="minscore">
+    <option value="0">Score min</option>
+    <option value="40">40+</option>
+    <option value="55">55+</option>
+    <option value="65">65+</option>
+    <option value="75">75+</option>
+  </select>
+  <label style="display:flex;align-items:center;gap:6px;color:#8b8d94;font-size:12px">
+    <input type="checkbox" id="whaleonly" style="width:auto"> 🐋 seulement
+  </label>
+  <button onclick="toggleWallets()">Smart Wallets</button>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>#</th><th>Token</th><th>Score</th><th>Phase</th><th>MCap</th><th>Chg</th><th>DD</th>
+      <th>Vol 5m</th><th>Holders</th><th>Narrative</th><th>Curve</th>
+      <th>Launchpad</th><th>Âge</th><th></th>
+    </tr>
+  </thead>
+  <tbody id="rows"></tbody>
+</table>
+<div class="empty" id="empty">En attente de données…</div>
+
+<div class="wallets" id="wpanel">
+  <button class="close" onclick="toggleWallets()">×</button>
+  <h3>🐋 Smart Wallets</h3>
+  <div class="wadd">
+    <input id="waddr" placeholder="Adresse Solana">
+    <button class="primary" onclick="addWallet()">+</button>
+  </div>
+  <div id="wlist"></div>
+</div>
+
+<script>
+let tokens = [];
+
+function usd(v){
+  if(v==null||!isFinite(v))return '—';
+  if(v>=1e9)return '$'+(v/1e9).toFixed(2)+'B';
+  if(v>=1e6)return '$'+(v/1e6).toFixed(2)+'M';
+  if(v>=1e3)return '$'+(v/1e3).toFixed(1)+'K';
+  return '$'+v.toFixed(0);
+}
+function age(ms){
+  if(ms==null)return '—';
+  const s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);
+  if(h>0)return h+'h'+(m%60)+'m';
+  if(m>0)return m+'m';
+  return s+'s';
+}
+function scoreClass(s){return s>=75?'s-hi':s>=55?'s-mid':'s-lo'}
+function chg(v){
+  if(v==null||!isFinite(v))return '<span style="color:#6b6d75">—</span>';
+  const p=(v*100);
+  const c=p>=0?'#22c55e':'#ef4444';
+  const sign=p>0?'+':'';
+  return '<span style="color:'+c+';font-weight:600">'+sign+p.toFixed(0)+'%</span>';
+}
+function narrBadge(n){
+  if(n==='ACCELERATING')return '<span class="badge b-acc">ACCEL</span>';
+  if(n==='BUILDING')return '<span class="badge b-build">BUILD</span>';
+  return '<span class="badge b-flat">FLAT</span>';
+}
+
+function render(){
+  const q=document.getElementById('q').value.toLowerCase();
+  const ph=document.getElementById('phase').value;
+  const ms=+document.getElementById('minscore').value;
+  const wo=document.getElementById('whaleonly').checked;
+
+  const list=tokens.filter(t=>
+    (!q||t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)) &&
+    (!ph||t.phase===ph) &&
+    ((t.score??0)>=ms) &&
+    (!wo||t.smartWalletsIn>0)
+  );
+
+  document.getElementById('empty').style.display=list.length?'none':'block';
+  document.getElementById('rows').innerHTML=list.map((t,i)=>`
+    <tr>
+      <td style="color:#6b6d75">${i+1}</td>
+      <td><div class="sym">$${t.symbol}${t.smartWalletsIn>0?' <span class="badge b-whale">🐋 '+t.smartWalletsIn+'</span>':''}${t.alerted?' <span class="badge b-alert">CALLED</span>':''}</div><div class="name">${t.name}</div></td>
+      <td><span class="score ${scoreClass(t.score??0)}">${t.score??'—'}</span></td>
+      <td><span class="badge ${t.phase==='MIGRATED'?'b-mig':'b-pre'}">${t.phase==='MIGRATED'?'MIGRATED':'PRE'}</span></td>
+      <td>${usd(t.marketCap)}</td>
+      <td>${chg(t.change)}</td>
+      <td>${chg(t.drawdown)}</td>
+      <td>${usd(t.volume5m)}</td>
+      <td>${t.holders??'—'}</td>
+      <td>${narrBadge(t.narrative)}</td>
+      <td><div class="bar"><i style="width:${Math.round((t.curveProgress??0)*100)}%"></i></div></td>
+      <td><span class="badge b-pump">${t.launchpad}</span></td>
+      <td style="color:#8b8d94">${age(t.ageMs)}</td>
+      <td><a class="gmgn" href="https://gmgn.ai/sol/token/${t.mint}" target="_blank">GMGN ↗</a></td>
+    </tr>`).join('');
+}
+
+function connect(){
+  const ws=new WebSocket('ws://'+location.host);
+  ws.onopen=()=>{document.getElementById('dot').className='dot';document.getElementById('conn').textContent='live'};
+  ws.onclose=()=>{document.getElementById('dot').className='dot off';document.getElementById('conn').textContent='déconnecté';setTimeout(connect,3000)};
+  ws.onmessage=e=>{
+    const m=JSON.parse(e.data);
+    if(m.type==='snapshot'){
+      tokens=m.tokens||[];
+      document.getElementById('sol').textContent='$'+(m.solPrice??0).toFixed(2);
+      if(m.stats){
+        document.getElementById('ntok').textContent=m.stats.total??0;
+        document.getElementById('npre').textContent=m.stats.preMigration??0;
+        document.getElementById('nmig').textContent=m.stats.migrated??0;
+      }
+      render();
+    }
+  };
+}
+
+function toggleWallets(){
+  const p=document.getElementById('wpanel');
+  p.classList.toggle('open');
+  if(p.classList.contains('open'))loadWallets();
+}
+async function loadWallets(){
+  const r=await fetch('/api/wallets');const d=await r.json();
+  document.getElementById('wlist').innerHTML=(d.wallets||[]).map(w=>
+    `<div class="wrow"><span>${w.slice(0,6)}…${w.slice(-6)}</span><button onclick="delWallet('${w}')">retirer</button></div>`
+  ).join('')||'<div style="color:#6b6d75;font-size:12px">Aucun wallet suivi.</div>';
+}
+async function addWallet(){
+  const i=document.getElementById('waddr');
+  const a=i.value.trim();if(!a)return;
+  const r=await fetch('/api/wallets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:a})});
+  if(r.ok){i.value='';loadWallets()}else{alert('Adresse invalide')}
+}
+async function delWallet(a){
+  await fetch('/api/wallets/'+a,{method:'DELETE'});
+  loadWallets();
+}
+
+['q','phase','minscore','whaleonly'].forEach(id=>
+  document.getElementById(id).addEventListener('input',render)
+);
+connect();
+</script>
+</body>
+</html>
