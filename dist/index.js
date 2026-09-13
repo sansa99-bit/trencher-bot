@@ -13,6 +13,8 @@ import { registerCommands } from './telegram/commands.js';
 import { createLogger } from './util/logger.js';
 import { startApi } from './api/server.js';
 import { startDexEnricher } from './core/dexscreener.js';
+import { startOutcomeTracker } from './core/outcomes.js';
+import { startLineageTracker } from './core/lineage.js';
 const log = createLogger('main');
 async function main() {
     const config = loadConfig();
@@ -27,6 +29,8 @@ async function main() {
     const stopBridge = startAlertBridge();
     const stopApi = startApi();
     const stopDex = startDexEnricher();
+    const stopOutcomes = startOutcomeTracker();
+    const stopLineage = startLineageTracker();
     try {
         const bot = telegram.create();
         if (bot) {
@@ -46,6 +50,8 @@ async function main() {
     setupShutdown(async () => {
         log.info('Arrêt en cours…');
         await source.stop();
+        stopLineage();
+        stopOutcomes();
         stopDex();
         stopApi();
         stopBridge();

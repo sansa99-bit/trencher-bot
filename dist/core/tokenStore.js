@@ -4,6 +4,7 @@
  */
 import { TradeBuffer } from './metrics.js';
 const INACTIVE_AFTER_MS = 15 * 60 * 1000;
+const MIGRATED_INACTIVE_AFTER_MS = 6 * 60 * 60 * 1000;
 const MAX_TOKENS = 3000;
 class TokenStore {
     tokens = new Map();
@@ -101,8 +102,15 @@ class TokenStore {
         for (const [mint, token] of this.tokens) {
             if (token.watched)
                 continue;
-            const lastActivity = Math.max(token.lastTradeAt, token.firstSeenAt);
-            if (now - lastActivity > INACTIVE_AFTER_MS) {
+            const lastActivity = Math.max(token.lastTradeAt, token.firstSeenAt, token.enrichedAt ?? 0);
+            // Un token migré ne reçoit plus de trades pump.fun : il est nourri par
+            // DexScreener. Sa fenêtre de survie est donc bien plus large, sinon on
+            // le perd juste au moment où il devient intéressant.
+            const proven = (token.holders ?? 0) >= 25 || (token.alertCount ?? 0) > 0;
+            const window = token.phase === 'MIGRATED' || proven
+                ? MIGRATED_INACTIVE_AFTER_MS
+                : INACTIVE_AFTER_MS;
+            if (now - lastActivity > window) {
                 this.tokens.delete(mint);
                 this.buffers.delete(mint);
                 removed++;
@@ -112,7 +120,7 @@ class TokenStore {
         if (this.tokens.size > MAX_TOKENS) {
             const candidates = this.all()
                 .filter((t) => !t.watched)
-                .sort((a, b) => a.lastTradeAt - b.lastTradeAt)
+                .sort((a, b) => Math.max(a.lastTradeAt, a.enrichedAt ?? 0) - Math.max(b.lastTradeAt, b.enrichedAt ?? 0))
                 .slice(0, this.tokens.size - MAX_TOKENS);
             for (const token of candidates) {
                 this.tokens.delete(token.mint);

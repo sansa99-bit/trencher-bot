@@ -8,6 +8,9 @@ import { tokenStore } from '../core/tokenStore.js';
 import { solPrice } from '../core/solPrice.js';
 import { createLogger } from '../util/logger.js';
 import { walletHoldings } from './holdings.js';
+import { outcomeStats } from '../core/outcomes.js';
+import { majors, startMajors } from './majors.js';
+import { creatorLaunches, isFarmClone, tickerLaunches } from '../core/lineage.js';
 const log = createLogger('api');
 const PORT = 3001;
 const WALLETS_PATH = resolve(process.cwd(), 'config/smart-wallets.json');
@@ -25,6 +28,8 @@ function toRow(t) {
         curveProgress: t.bondingCurveProgress,
         smartWalletsIn: t.smartWallets?.entered ?? 0,
         launchpad: 'Pump.fun',
+        tradeCount1m: t.volume.tradeCount1m,
+        launches: Math.max(tickerLaunches(t.symbol), creatorLaunches(t.creator)),
         change: t.firstMarketCap && t.marketCap ? t.marketCap / t.firstMarketCap - 1 : undefined,
         drawdown: t.athMarketCap && t.marketCap ? t.marketCap / t.athMarketCap - 1 : undefined,
         ageMs: Date.now() - t.createdAt,
@@ -34,23 +39,58 @@ function toRow(t) {
 }
 /** Vitalité : le token doit être actif MAINTENANT, pas gros. */
 const ALIVE_MAX_SILENCE_MS = 300_000;
+const ESTABLISHED_SILENCE_MS = 1_200_000; // 20 min pour un token confirmé
 const MIN_MARKET_CAP = 3_200;
 const MIN_TRADES_1M = 3;
 const MIN_HOLDERS = 4;
 const MIN_TURNOVER_5M = 0.12;
-function isAlive(t) {
+/** Post-migration : nourri par DexScreener, qui ne donne pas les holders. */
+const MIG_MAX_SILENCE_MS = 900_000; // 15 min sans volume
+const MIG_MIN_MARKET_CAP = 15_000;
+const MIG_MIN_LIQUIDITY = 8_000;
+const MIG_MIN_TURNOVER_5M = 0.02; // les mcaps sont bien plus gros après migration
+function isAliveMigrated(t) {
     const now = Date.now();
-    if (!t.lastTradeAt || now - t.lastTradeAt > ALIVE_MAX_SILENCE_MS)
+    const seen = Math.max(t.lastTradeAt ?? 0, t.enrichedAt ?? 0);
+    if (!seen || now - seen > MIG_MAX_SILENCE_MS)
         return false;
     const mcap = t.marketCap ?? 0;
+    if (mcap < MIG_MIN_MARKET_CAP)
+        return false;
+    if ((t.liquidityUsd ?? 0) < MIG_MIN_LIQUIDITY)
+        return false;
+    // Pas de critère holders : DexScreener ne le fournit pas.
+    const vol5m = t.volume.volume5m ?? 0;
+    if (vol5m <= 0)
+        return false;
+    return vol5m / mcap >= MIG_MIN_TURNOVER_5M;
+}
+function isAlive(t) {
+    if (isFarmClone(t))
+        return false;
+    if (t.phase === 'MIGRATED')
+        return isAliveMigrated(t);
+    const now = Date.now();
+    const mcap = t.marketCap ?? 0;
+    const holders = t.holders ?? 0;
+    const vol5m = t.volume.volume5m ?? 0;
+    // Un token qui a déjà fait ses preuves mérite plus de patience : il peut
+    // consolider plusieurs minutes avant de repartir.
+    const established = holders >= 25 || vol5m >= 8_000 || (t.alertCount ?? 0) > 0;
+    const silenceLimit = established ? ESTABLISHED_SILENCE_MS : ALIVE_MAX_SILENCE_MS;
+    if (!t.lastTradeAt || now - t.lastTradeAt > silenceLimit)
+        return false;
     if (mcap < MIN_MARKET_CAP)
         return false;
+    if (established) {
+        // On ne lui réapplique pas les seuils d'entrée : il les a déjà franchis.
+        return vol5m > 0 || (t.volume.tradeCount1m ?? 0) > 0;
+    }
     if ((t.volume.tradeCount1m ?? 0) < MIN_TRADES_1M)
         return false;
-    if ((t.holders ?? 0) < MIN_HOLDERS)
+    if (holders < MIN_HOLDERS)
         return false;
-    const turnover = (t.volume.volume5m ?? 0) / mcap;
-    return turnover >= MIN_TURNOVER_5M;
+    return vol5m / mcap >= MIN_TURNOVER_5M;
 }
 function topTokens(limit = 50) {
     return tokenStore
@@ -76,11 +116,21 @@ function writeWallets(wallets) {
     tokenStore.setSmartWallets(wallets);
 }
 export function startApi() {
+    const stopMajors = startMajors();
     const app = express();
     app.use(express.json());
     app.use(express.static(resolve(process.cwd(), 'public')));
     app.get('/api/tokens', (_req, res) => {
-        res.json({ tokens: topTokens(), solPrice: solPrice.get(), stats: tokenStore.stats() });
+        const all = topTokens(100);
+        res.json({
+            tokens: all,
+            pre: all.filter((t) => t.phase === 'PRE_MIGRATION').slice(0, 50),
+            migrated: all.filter((t) => t.phase === 'MIGRATED').slice(0, 50),
+            solPrice: solPrice.get(),
+            stats: tokenStore.stats(),
+            outcomes: outcomeStats(),
+            majors: majors(),
+        });
     });
     app.get('/api/wallets', (_req, res) => {
         res.json({ wallets: readWallets() });
@@ -105,11 +155,22 @@ export function startApi() {
     app.get('/api/diag', (_req, res) => {
         const now = Date.now();
         const all = tokenStore.all();
-        const fail = { noScore: 0, silence: 0, mcap: 0, trades: 0, holders: 0, turnover: 0, alive: 0 };
+        const fail = { noScore: 0, silence: 0, mcap: 0, trades: 0, holders: 0, turnover: 0, migRejected: 0, farm: 0, alive: 0 };
         const samples = [];
         for (const t of all) {
             if (t.score === undefined) {
                 fail.noScore++;
+                continue;
+            }
+            if (isFarmClone(t)) {
+                fail.farm = (fail.farm ?? 0) + 1;
+                continue;
+            }
+            if (t.phase === 'MIGRATED') {
+                if (isAliveMigrated(t))
+                    fail.alive++;
+                else
+                    fail.migRejected = (fail.migRejected ?? 0) + 1;
                 continue;
             }
             if (!t.lastTradeAt || now - t.lastTradeAt > ALIVE_MAX_SILENCE_MS) {
@@ -163,7 +224,11 @@ export function startApi() {
     const clients = new Set();
     wss.on('connection', (ws) => {
         clients.add(ws);
-        ws.send(JSON.stringify({ type: 'snapshot', tokens: topTokens(), solPrice: solPrice.get() }));
+        const snap = topTokens(100);
+        ws.send(JSON.stringify({ type: 'snapshot', tokens: snap,
+            pre: snap.filter((t) => t.phase === 'PRE_MIGRATION').slice(0, 50),
+            migrated: snap.filter((t) => t.phase === 'MIGRATED').slice(0, 50),
+            solPrice: solPrice.get() }));
         ws.on('close', () => clients.delete(ws));
         ws.on('error', () => clients.delete(ws));
     });
@@ -183,7 +248,11 @@ export function startApi() {
     const pushTimer = setInterval(() => {
         if (clients.size === 0)
             return;
-        broadcast({ type: 'snapshot', tokens: topTokens(), solPrice: solPrice.get(), stats: tokenStore.stats() });
+        const snap = topTokens(100);
+        broadcast({ type: 'snapshot', tokens: snap,
+            pre: snap.filter((t) => t.phase === 'PRE_MIGRATION').slice(0, 50),
+            migrated: snap.filter((t) => t.phase === 'MIGRATED').slice(0, 50),
+            solPrice: solPrice.get(), stats: tokenStore.stats(), outcomes: outcomeStats(), majors: majors() });
     }, 2000);
     pushTimer.unref();
     const offAlert = bus.on('alert:emit', (event) => {
@@ -193,6 +262,7 @@ export function startApi() {
         log.info(`Dashboard disponible sur http://0.0.0.0:${PORT}`);
     });
     return () => {
+        stopMajors();
         clearInterval(pushTimer);
         offAlert();
         for (const ws of clients)

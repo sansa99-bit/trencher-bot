@@ -32,6 +32,7 @@ function bestPerMint(pairs) {
 }
 function apply(token, pair) {
     const now = Date.now();
+    token.enrichedAt = now;
     // Le nom n'est écrasé que s'il est resté générique
     const sym = pair.baseToken?.symbol?.trim();
     const junk = new Set(['pump.fun', 'pumpfun', 'unknown', 'sol', 'wsol']);

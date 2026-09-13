@@ -112,6 +112,7 @@ export interface TokenState {
   // Anti-spam
   lastAlertLevel: AlertLevel;
   lastAlertScore: number;
+  enrichedAt?: number;
   firstMarketCap?: number;
   alertPrice?: number;
   alertMcap?: number;

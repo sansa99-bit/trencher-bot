@@ -51,9 +51,54 @@ a.gmgn:hover{text-decoration:underline}
 .wadd{display:flex;gap:8px;margin-bottom:16px}
 .wadd input{flex:1;font-family:monospace;font-size:11px}
 .close{position:absolute;top:16px;right:16px;background:none;border:none;color:#6b6d75;font-size:20px;cursor:pointer}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#1c1d21}
+.pane{background:#0a0b0d;min-width:0;overflow-x:auto}
+.pane-title{font-size:11px;letter-spacing:.8px;padding:10px 12px;color:#8b8d94;font-weight:600;background:#0e0f12;border-bottom:1px solid #1c1d21;position:sticky;top:0}
+.pane-title span{color:#22c55e;margin-left:6px}
+.pane .empty{padding:30px;font-size:12px}
+@media(max-width:1100px){.split{grid-template-columns:1fr}}
+
+.donut-wrap{display:flex;align-items:center;gap:22px;padding:16px 20px;border-bottom:1px solid #1c1d21;background:#0c0d10}
+.donut{position:relative;width:112px;height:112px;flex-shrink:0}
+.donut svg{width:100%;height:100%;animation:spin 24s linear infinite;transform-origin:50% 50%}
+@keyframes spin{to{transform:rotate(360deg)}}
+.donut-core{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.donut-core b{font-size:22px;color:#22c55e;line-height:1;text-shadow:0 0 12px rgba(34,197,94,.5)}
+.donut-core span{font-size:9px;color:#6b6d75;letter-spacing:1px;margin-top:3px}
+.donut-seg{transition:stroke-dasharray .6s ease}
+.legend{display:flex;flex-direction:column;gap:7px;font-size:12px}
+.legend div{display:flex;align-items:center;gap:8px}
+.legend i{width:9px;height:9px;border-radius:2px;display:inline-block}
+.legend b{min-width:44px;text-align:right;font-variant-numeric:tabular-nums}
+.legend em{color:#6b6d75;font-style:normal;font-size:11px}
+
+.ecg{flex:1;min-width:0;height:112px;position:relative;background:#0a0b0d;border:1px solid #16171b;border-radius:6px;overflow:hidden;margin-left:6px}
+.ecg canvas{display:block;width:100%;height:100%}
+.ecg-label{position:absolute;top:8px;left:12px;font-size:9px;letter-spacing:1.2px;color:#3f8f5f;pointer-events:none}
+.ecg-bpm{position:absolute;top:8px;right:12px;font-size:11px;color:#22c55e;font-variant-numeric:tabular-nums;pointer-events:none}
+.ecg-bpm b{font-size:15px;text-shadow:0 0 10px rgba(34,197,94,.55)}
+.ecg-flat{position:absolute;bottom:8px;left:12px;font-size:9px;color:#6b6d75;pointer-events:none}
+
+body{padding:0 34px}
+.rail{position:fixed;top:0;bottom:0;width:34px;background:#0c0d10;z-index:30;overflow:hidden;border-color:#1c1d21;border-style:solid;border-width:0}
+.rail-l{left:0;border-right-width:1px}
+.rail-r{right:0;border-left-width:1px}
+.rail-track{position:absolute;left:0;width:100%;display:flex;flex-direction:column;align-items:center;gap:26px;padding:14px 0}
+.rail-l .rail-track{animation:railUp 34s linear infinite}
+.rail-r .rail-track{animation:railDown 34s linear infinite}
+@keyframes railUp{from{transform:translateY(0)}to{transform:translateY(-50%)}}
+@keyframes railDown{from{transform:translateY(-50%)}to{transform:translateY(0)}}
+.tick{writing-mode:vertical-rl;text-orientation:mixed;font-size:10px;letter-spacing:.8px;white-space:nowrap;font-variant-numeric:tabular-nums;line-height:1.7}
+.tick b{color:#e4e4e7;font-weight:700}
+.tick .up{color:#22c55e}
+.tick .dn{color:#ef4444}
+@media(max-width:900px){body{padding:0}.rail{display:none}}
 </style>
 </head>
 <body>
+<div class="rail rail-l"><div class="rail-track" id="railL"></div></div>
+<div class="rail rail-r"><div class="rail-track" id="railR"></div></div>
+
 <header>
   <div class="brand">TRENCHER <span>SCANNER</span></div>
   <div class="stats">
@@ -64,6 +109,33 @@ a.gmgn:hover{text-decoration:underline}
     <div>Migrated <b id="nmig">0</b></div>
   </div>
 </header>
+
+<div class="donut-wrap">
+  <div class="donut">
+    <svg viewBox="0 0 42 42">
+      <circle cx="21" cy="21" r="15.9" fill="none" stroke="#16171b" stroke-width="4"></circle>
+      <circle id="segWin"  class="donut-seg" cx="21" cy="21" r="15.9" fill="none" stroke="#22c55e" stroke-width="4"
+              stroke-dasharray="0 100" stroke-dashoffset="25" stroke-linecap="round"></circle>
+      <circle id="segRug"  class="donut-seg" cx="21" cy="21" r="15.9" fill="none" stroke="#ef4444" stroke-width="4"
+              stroke-dasharray="0 100" stroke-dashoffset="25" stroke-linecap="round"></circle>
+      <circle id="segNeut" class="donut-seg" cx="21" cy="21" r="15.9" fill="none" stroke="#2b2d33" stroke-width="4"
+              stroke-dasharray="0 100" stroke-dashoffset="25"></circle>
+    </svg>
+    <div class="donut-core"><b id="oCalled">0</b><span>CALLS</span></div>
+  </div>
+  <div class="legend">
+    <div><i style="background:#22c55e"></i><b id="oWin">0</b> <em>réussis (2x+)</em></div>
+    <div><i style="background:#ef4444"></i><b id="oRug">0</b> <em>rug (-80% ou collapse)</em></div>
+    <div><i style="background:#2b2d33"></i><b id="oNeut">0</b> <em>neutres</em></div>
+    <div style="margin-top:4px;color:#8b8d94"><b id="oScan">0</b> <em>tokens scannés au total</em></div>
+  </div>
+  <div class="ecg">
+    <canvas id="ecg"></canvas>
+    <div class="ecg-label">SCANNER VITALS</div>
+    <div class="ecg-bpm"><b id="bpm">0</b> tx/min</div>
+    <div class="ecg-flat" id="ecgState">en attente…</div>
+  </div>
+</div>
 
 <div class="toolbar">
   <input id="q" placeholder="Rechercher un symbole…" style="width:200px">
@@ -85,17 +157,27 @@ a.gmgn:hover{text-decoration:underline}
   <button onclick="toggleWallets()">Smart Wallets</button>
 </div>
 
-<table>
-  <thead>
-    <tr>
-      <th>#</th><th>Token</th><th>Score</th><th>Phase</th><th>MCap</th><th>Chg</th><th>DD</th>
-      <th>Vol 5m</th><th>Holders</th><th>Narrative</th><th>Curve</th>
-      <th>Launchpad</th><th>Âge</th><th></th>
-    </tr>
-  </thead>
-  <tbody id="rows"></tbody>
-</table>
-<div class="empty" id="empty">En attente de données…</div>
+<div class="split">
+  <section class="pane">
+    <h2 class="pane-title">🌱 PRE-BONDING <span id="npre2">0</span></h2>
+    <table>
+      <thead><tr>      <th>#</th><th>Token</th><th>Score</th><th>MCap</th><th>Chg</th><th>DD</th>
+      <th>Vol 5m</th><th>Holders</th><th>Narrative</th><th>Curve</th><th>Âge</th><th></th></tr></thead>
+      <tbody id="rowsPre"></tbody>
+    </table>
+    <div class="empty" id="emptyPre">Aucun token pre-bonding.</div>
+  </section>
+
+  <section class="pane">
+    <h2 class="pane-title">🚀 MIGRATED <span id="nmig2">0</span></h2>
+    <table>
+      <thead><tr>      <th>#</th><th>Token</th><th>Score</th><th>MCap</th><th>Chg</th><th>DD</th>
+      <th>Vol 5m</th><th>Holders</th><th>Narrative</th><th>Curve</th><th>Âge</th><th></th></tr></thead>
+      <tbody id="rowsMig"></tbody>
+    </table>
+    <div class="empty" id="emptyMig">Aucun token migré.</div>
+  </section>
+</div>
 
 <div class="wallets" id="wpanel">
   <button class="close" onclick="toggleWallets()">×</button>
@@ -109,6 +191,8 @@ a.gmgn:hover{text-decoration:underline}
 
 <script>
 let tokens = [];
+let preList = [];
+let migList = [];
 
 function usd(v){
   if(v==null||!isFinite(v))return '—';
@@ -138,26 +222,11 @@ function narrBadge(n){
   return '<span class="badge b-flat">FLAT</span>';
 }
 
-function render(){
-  const q=document.getElementById('q').value.toLowerCase();
-  const ph=document.getElementById('phase').value;
-  const ms=+document.getElementById('minscore').value;
-  const wo=document.getElementById('whaleonly').checked;
-
-  const list=tokens.filter(t=>
-    (!q||t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)) &&
-    (!ph||t.phase===ph) &&
-    ((t.score??0)>=ms) &&
-    (!wo||t.smartWalletsIn>0)
-  );
-
-  document.getElementById('empty').style.display=list.length?'none':'block';
-  document.getElementById('rows').innerHTML=list.map((t,i)=>`
-    <tr>
+function rowHtml(t,i){
+  return `<tr>
       <td style="color:#6b6d75">${i+1}</td>
-      <td><div class="sym">$${t.symbol}${t.smartWalletsIn>0?' <span class="badge b-whale">🐋 '+t.smartWalletsIn+'</span>':''}${t.alerted?' <span class="badge b-alert">CALLED</span>':''}</div><div class="name">${t.name}</div></td>
+      <td><div class="sym">$${t.symbol}${t.smartWalletsIn>0?' <span class="badge b-whale">🐋 '+t.smartWalletsIn+'</span>':''}${t.alerted?' <span class="badge b-alert">CALLED</span>':''}${(t.launches||0)>=3?' <span class="badge b-build">#'+t.launches+'</span>':''}</div><div class="name">${t.name}</div></td>
       <td><span class="score ${scoreClass(t.score??0)}">${t.score??'—'}</span></td>
-      <td><span class="badge ${t.phase==='MIGRATED'?'b-mig':'b-pre'}">${t.phase==='MIGRATED'?'MIGRATED':'PRE'}</span></td>
       <td>${usd(t.marketCap)}</td>
       <td>${chg(t.change)}</td>
       <td>${chg(t.drawdown)}</td>
@@ -165,10 +234,164 @@ function render(){
       <td>${t.holders??'—'}</td>
       <td>${narrBadge(t.narrative)}</td>
       <td><div class="bar"><i style="width:${Math.round((t.curveProgress??0)*100)}%"></i></div></td>
-      <td><span class="badge b-pump">${t.launchpad}</span></td>
       <td style="color:#8b8d94">${age(t.ageMs)}</td>
       <td><a class="gmgn" href="https://gmgn.ai/sol/token/${t.mint}" target="_blank">GMGN ↗</a></td>
-    </tr>`).join('');
+    </tr>`;
+}
+
+function applyFilters(list){
+  const q=document.getElementById('q').value.toLowerCase();
+  const ms=+document.getElementById('minscore').value;
+  const wo=document.getElementById('whaleonly').checked;
+  return list.filter(t=>
+    (!q||t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)) &&
+    ((t.score??0)>=ms) &&
+    (!wo||t.smartWalletsIn>0)
+  );
+}
+
+function render(){
+  const ph=document.getElementById('phase').value;
+
+  const pre=applyFilters(preList);
+  const mig=applyFilters(migList);
+
+  const panes=document.querySelectorAll('.pane');
+  panes[0].style.display=(ph==='MIGRATED')?'none':'';
+  panes[1].style.display=(ph==='PRE_MIGRATION')?'none':'';
+
+  document.getElementById('npre2').textContent=pre.length;
+  document.getElementById('nmig2').textContent=mig.length;
+  document.getElementById('rowsPre').innerHTML=pre.map(rowHtml).join('');
+  document.getElementById('rowsMig').innerHTML=mig.map(rowHtml).join('');
+  document.getElementById('emptyPre').style.display=pre.length?'none':'block';
+  document.getElementById('emptyMig').style.display=mig.length?'none':'block';
+}
+
+
+function setSeg(id,pct,offset){
+  const el=document.getElementById(id);
+  el.setAttribute('stroke-dasharray', pct.toFixed(2)+' '+(100-pct).toFixed(2));
+  el.setAttribute('stroke-dashoffset', String(offset));
+}
+function renderDonut(o){
+  if(!o) return;
+  const total=Math.max(1,o.rug+o.win+o.neutral);
+  const win=o.win/total*100, rug=o.rug/total*100, neut=o.neutral/total*100;
+  setSeg('segWin',  win, 25);
+  setSeg('segRug',  rug, 25-win);
+  setSeg('segNeut', neut, 25-win-rug);
+  document.getElementById('oWin').textContent=o.win.toLocaleString('fr-FR');
+  document.getElementById('oRug').textContent=o.rug.toLocaleString('fr-FR');
+  document.getElementById('oNeut').textContent=o.neutral.toLocaleString('fr-FR');
+  document.getElementById('oScan').textContent=o.scanned.toLocaleString('fr-FR');
+  document.getElementById('oCalled').textContent=o.called.toLocaleString('fr-FR');
+}
+
+
+let ecgCtx=null, ecgW=0, ecgH=0, ecgX=0, ecgPhase=0, ecgRate=0, ecgTarget=0, ecgLastBeat=0;
+
+function initEcg(){
+  const c=document.getElementById('ecg');
+  if(!c) return;
+  const dpr=window.devicePixelRatio||1;
+  const r=c.parentElement.getBoundingClientRect();
+  c.width=r.width*dpr; c.height=r.height*dpr;
+  ecgW=r.width; ecgH=r.height;
+  ecgCtx=c.getContext('2d');
+  ecgCtx.scale(dpr,dpr);
+  ecgCtx.fillStyle='#0a0b0d';
+  ecgCtx.fillRect(0,0,ecgW,ecgH);
+  ecgX=0;
+  requestAnimationFrame(drawEcg);
+}
+
+// profil d'un battement : P, complexe QRS, T
+function beatY(p){
+  if(p<0.10) return Math.sin(p/0.10*Math.PI)*0.13;
+  if(p<0.18) return 0;
+  if(p<0.21) return -(p-0.18)/0.03*0.18;
+  if(p<0.26) return -0.18+(p-0.21)/0.05*1.18;
+  if(p<0.31) return 1.00-(p-0.26)/0.05*1.42;
+  if(p<0.36) return -0.42+(p-0.31)/0.05*0.42;
+  if(p<0.52) return 0;
+  if(p<0.72) return Math.sin((p-0.52)/0.20*Math.PI)*0.26;
+  return 0;
+}
+
+function drawEcg(){
+  if(!ecgCtx){ return; }
+  const mid=ecgH*0.55, amp=ecgH*0.34;
+  const speed=1.7;
+
+  // efface la colonne courante avec une trainée
+  ecgCtx.fillStyle='rgba(10,11,13,0.30)';
+  ecgCtx.fillRect(ecgX,0,speed+26,ecgH);
+
+  ecgRate += (ecgTarget-ecgRate)*0.04;
+  const cycle=Math.max(28, 210-ecgRate*1.5);   // plus d'activité = battements rapprochés
+  const flat=ecgRate<1;
+
+  ecgCtx.strokeStyle='#22c55e';
+  ecgCtx.lineWidth=1.6;
+  ecgCtx.shadowColor='rgba(34,197,94,0.85)';
+  ecgCtx.shadowBlur=7;
+  ecgCtx.beginPath();
+
+  for(let i=0;i<speed;i+=0.5){
+    const x=ecgX+i;
+    ecgPhase+=0.5/cycle;
+    if(ecgPhase>=1){ ecgPhase-=1; ecgLastBeat=Date.now(); }
+    const y=flat? mid : mid-beatY(ecgPhase)*amp;
+    if(i===0) ecgCtx.moveTo(x,y); else ecgCtx.lineTo(x,y);
+  }
+  ecgCtx.stroke();
+  ecgCtx.shadowBlur=0;
+
+  // tête lumineuse
+  const headY=flat? mid : mid-beatY(ecgPhase)*amp;
+  ecgCtx.fillStyle='#4ade80';
+  ecgCtx.shadowColor='rgba(74,222,128,0.95)';
+  ecgCtx.shadowBlur=11;
+  ecgCtx.beginPath();
+  ecgCtx.arc(ecgX+speed,headY,2.1,0,Math.PI*2);
+  ecgCtx.fill();
+  ecgCtx.shadowBlur=0;
+
+  ecgX+=speed;
+  if(ecgX>ecgW){ ecgX=0; }
+  requestAnimationFrame(drawEcg);
+}
+
+function updateEcg(stats,tokens){
+  // rythme = trades par minute agrégés sur les tokens suivis
+  let tpm=0;
+  for(const t of (tokens||[])) tpm += (t.tradeCount1m||0);
+  ecgTarget=tpm;
+  const el=document.getElementById('bpm');
+  if(el) el.textContent=Math.round(tpm).toLocaleString('fr-FR');
+  const st=document.getElementById('ecgState');
+  if(st) st.textContent = tpm<1 ? 'aucune activité' : (tpm<40?'rythme calme':(tpm<200?'rythme soutenu':'forte activité'));
+}
+
+
+function fmtPrice(v){
+  if(v>=1000) return '$'+v.toLocaleString('fr-FR',{maximumFractionDigits:0});
+  if(v>=1)    return '$'+v.toFixed(2);
+  return '$'+v.toFixed(4);
+}
+function renderRails(list){
+  if(!list||!list.length) return;
+  const one=list.map(m=>{
+    const c=(m.change24h??0)>=0?'up':'dn';
+    const sign=(m.change24h??0)>=0?'+':'';
+    return '<div class="tick"><b>'+m.symbol+'</b> '+fmtPrice(m.price)+
+           ' <span class="'+c+'">'+sign+(m.change24h??0).toFixed(1)+'%</span></div>';
+  }).join('');
+  // doublé pour que la boucle soit sans couture
+  const html=one+one;
+  document.getElementById('railL').innerHTML=html;
+  document.getElementById('railR').innerHTML=html;
 }
 
 function connect(){
@@ -179,12 +402,17 @@ function connect(){
     const m=JSON.parse(e.data);
     if(m.type==='snapshot'){
       tokens=m.tokens||[];
+      preList=m.pre||tokens.filter(t=>t.phase!=='MIGRATED');
+      migList=m.migrated||tokens.filter(t=>t.phase==='MIGRATED');
       document.getElementById('sol').textContent='$'+(m.solPrice??0).toFixed(2);
       if(m.stats){
         document.getElementById('ntok').textContent=m.stats.total??0;
         document.getElementById('npre').textContent=m.stats.preMigration??0;
         document.getElementById('nmig').textContent=m.stats.migrated??0;
       }
+      renderDonut(m.outcomes);
+      renderRails(m.majors);
+      updateEcg(m.stats, tokens);
       render();
     }
   };
@@ -244,6 +472,8 @@ async function delWallet(a){
 ['q','phase','minscore','whaleonly'].forEach(id=>
   document.getElementById(id).addEventListener('input',render)
 );
+initEcg();
+window.addEventListener('resize',initEcg);
 connect();
 </script>
 </body>

@@ -48,6 +48,7 @@ function bestPerMint(pairs: DexPair[]): Map<string, DexPair> {
 
 function apply(token: TokenState, pair: DexPair): void {
   const now = Date.now();
+  token.enrichedAt = now;
 
   // Le nom n'est écrasé que s'il est resté générique
   const sym = pair.baseToken?.symbol?.trim();
