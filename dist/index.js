@@ -12,6 +12,7 @@ import { telegram } from './telegram/bot.js';
 import { registerCommands } from './telegram/commands.js';
 import { createLogger } from './util/logger.js';
 import { startApi } from './api/server.js';
+import { startDexEnricher } from './core/dexscreener.js';
 const log = createLogger('main');
 async function main() {
     const config = loadConfig();
@@ -25,6 +26,7 @@ async function main() {
     const stopPipeline = startPipeline();
     const stopBridge = startAlertBridge();
     const stopApi = startApi();
+    const stopDex = startDexEnricher();
     try {
         const bot = telegram.create();
         if (bot) {
@@ -44,6 +46,7 @@ async function main() {
     setupShutdown(async () => {
         log.info('Arrêt en cours…');
         await source.stop();
+        stopDex();
         stopApi();
         stopBridge();
         stopPipeline();

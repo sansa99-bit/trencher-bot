@@ -58,8 +58,8 @@ function toRow(t: TokenState): TokenRow {
 }
 
 /** Vitalité : le token doit être actif MAINTENANT, pas gros. */
-const ALIVE_MAX_SILENCE_MS = 120_000;
-const MIN_MARKET_CAP = 5_000;
+const ALIVE_MAX_SILENCE_MS = 300_000;
+const MIN_MARKET_CAP = 3_200;
 const MIN_TRADES_1M = 3;
 const MIN_HOLDERS = 4;
 const MIN_TURNOVER_5M = 0.12;

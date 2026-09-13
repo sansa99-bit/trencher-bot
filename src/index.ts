@@ -12,6 +12,7 @@ import { telegram } from './telegram/bot.js';
 import { registerCommands } from './telegram/commands.js';
 import { createLogger } from './util/logger.js';
 import { startApi } from './api/server.js';
+import { startDexEnricher } from './core/dexscreener.js';
 import type { IngestionSource } from './core/types.js';
 
 const log = createLogger('main');
@@ -31,6 +32,7 @@ async function main(): Promise<void> {
   const stopPipeline = startPipeline();
   const stopBridge = startAlertBridge();
   const stopApi = startApi();
+  const stopDex = startDexEnricher();
 
   try {
     const bot = telegram.create();
@@ -55,6 +57,7 @@ async function main(): Promise<void> {
   setupShutdown(async () => {
     log.info('Arrêt en cours…');
     await source.stop();
+    stopDex();
     stopApi();
     stopBridge();
     stopPipeline();
